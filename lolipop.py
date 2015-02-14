@@ -67,6 +67,7 @@ BLUE = (0, 0, 255)
 CYAN = (0, 255, 255)
 YELLOW = (255, 255, 0)
 HORRIBLEMAGENTA = (255, 0, 255)
+ALMOSTWHITE = (250,250,250)
 STATUSBARGRAY = (181, 181, 181)
 BGRGRAY = (230, 230, 230) # Wow, this came in handy....
 #                         # ... and THAT is why a simple bgr color is perfectly fine!
@@ -103,6 +104,9 @@ class Graphics(object):
         self.mainmenubgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "sleepy_loli_resized.png"))
         self.mainmenubgr = (self.mainmenubgr, self.mainmenubgr.get_rect(x=10))
         
+        self.gamebgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "background.jpg")).convert()
+        self.darkgamebgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "background-dark.jpg")).convert()
+        
         self.lelittlestar = pygame.image.load(os.path.join(PATH, "images", "menu", "smallstarthing.png"))
         lolipath = os.path.join(PATH, "images", "lolis", "resized")
         self.lolis = [pygame.image.load(os.path.join(lolipath, x)) for x in os.listdir(lolipath)]
@@ -110,35 +114,36 @@ class Graphics(object):
         self.statusbar = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'statusbar.png'))
         self.heart = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'heart.png'))
         self.over9000 = Game.text(Game, "IT'S OVER 9000!", 80, pos=(0, -100), font='edo.ttf')
-        self.volume = [pygame.image.load(os.path.join(PATH, "images", "misc", "volume_"+x+".png")) for x in ("off", "on")]
+        self.volume = [pygame.image.load(os.path.join(PATH, "images", "misc", "volume_"+x+"_new.png")) for x in ("off", "on")]
         
         self.storyloli = pygame.image.load(os.path.join(PATH, "images", "menu", "story_loli.png"))
         self.credits = pygame.image.load(os.path.join(PATH, "images", "misc", "credits.png"))
     
-    def drawLives(self, nOfLives):
+    def drawLives(self, nOfLives, dark=False):
         """Draw the lives on the statusbar"""
-        initialPos = (100, 10)
+        initialPos = (45, 7)
         if nOfLives < 0: nOfLives = 0 # can't make surface with negative size
-        self.statusbar = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'statusbar.png'))
+        if not dark: self.top = pygame.image.load(os.path.join(PATH, "images", "misc", "top.png"))
+        else: self.top = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'top-dark.png'))
         if nOfLives > 3:
             if int(nOfLives) == nOfLives: # doesn't truncate => whole number
-                self.statusbar.blit(self.heart, initialPos)
+                self.top.blit(self.heart, initialPos)
             else:
                 surf = pygame.Surface((round(31*(nOfLives-int(nOfLives))), 30))
-                surf.fill(STATUSBARGRAY)
+                surf.blit(self.top, (0,0), pygame.Rect(initialPos, surf.get_size()))
                 surf.blit(self.heart, (0,0))
-                self.statusbar.blit(surf, initialPos)
+                self.top.blit(surf, initialPos)
         else:
             x, y = initialPos
             while nOfLives >= 1:
-                self.statusbar.blit(self.heart, (x,y))
+                self.top.blit(self.heart, (x,y))
                 nOfLives -= 1
                 x += 35
             if nOfLives:
                 surf = pygame.Surface((round(31*nOfLives), 30))
-                surf.fill((181,181,181))
+                surf.blit(self.top, (0, 0), pygame.Rect((x, y), surf.get_size()))
                 surf.blit(self.heart, (0,0))
-                self.statusbar.blit(surf, (x,y))
+                self.top.blit(surf, (x,y))
 
 
 
@@ -161,23 +166,28 @@ class Sound(object):
 
 
 class Loli(object):
-    def __init__(self, loli):
+    def __init__(self, loli, surf):
+        self.bgr = surf.convert()
         
         self.origimage = loli
+        self.currentLoliImage = self.origimage
         self.image = pygame.Surface(self.origimage.get_size())
-        self.image.fill(BGRGRAY)
-        self.image.set_colorkey(BGRGRAY)
-        self.image.blit(self.origimage, (0,0))
+        
+        # place image
         self.rect = self.image.get_rect()
-        # I'll get back to placing the rect
+        self.hitbox = True
+        minDistanceFromEdge = 100
+        self.rect.center = (random.randint(minDistanceFromEdge, 640-minDistanceFromEdge), 600)
+        
+        # make the background the screen thus far
+        self.image.blit(self.bgr, (-self.rect.x, -self.rect.y))
+        self.image.blit(self.origimage, (0,0))
+        
         
         # base horizontal speed
         self.hspeed = 0.2
         self.maxhspeed = random.randint(5, 7)
         self.hvel = self.maxhspeed*random.choice((-1, 1)) # random start direction: left/right
-        
-        minDistanceFromEdge = 100
-        self.rect.center = (random.randint(minDistanceFromEdge, 640-minDistanceFromEdge), 600)
         
         # Any decimal positions will be stored here
         self.xpos, self.ypos = self.rect.x, self.rect.y
@@ -194,12 +204,23 @@ class Loli(object):
         self.resizer = 1
         self.removeThyself = False
         self.doneRemoving = False
-        self.alpha = 250
+        self.alpha = 0
+        #self.alpha = 255
         bpth = os.path.join(PATH, "images", "misc", "blood_d")
         self.bloodanimation = [pygame.image.load(os.path.join(bpth, x)) for x in os.listdir(bpth)]
         self.bloodindex = 0
     
     def draw(self, surf):
+        #self.image.fill(ALMOSTWHITE)
+        if self.removeThyself:
+            self.bgr = surf.copy()
+            self.image.blit(self.bgr, (0,0), self.rect)
+            self.image.blit(self.currentLoliImage, (0,0))
+            self.bgr.set_alpha(self.alpha)
+            self.image.blit(self.bgr, (0,0), self.rect)
+            #self.image.set_alpha(self.alpha)
+        else:
+            self.image = self.origimage.copy()
         surf.blit(self.image, self.rect)
     
     def goUp(self, base, randomnessBoundry):
@@ -232,7 +253,9 @@ class Loli(object):
             self.hvel = 0
             self.resizer = round(self.resizer+0.05, 2)
             c = self.rect.center
-            self.image = pygame.transform.scale(self.origimage, (round(self.origimage.get_width()*self.resizer), round(self.origimage.get_height()*self.resizer)))
+            self.currentLoliImage = pygame.transform.scale(self.origimage, (round(self.origimage.get_width()*self.resizer), round(self.origimage.get_height()*self.resizer)))
+            self.image = pygame.Surface(self.currentLoliImage.get_size())
+            self.image.set_colorkey(ALMOSTWHITE)
             self.rect = self.image.get_rect(center=c)
             self.removeCounter -= 1
             if not self.removeCounter:
@@ -243,8 +266,8 @@ class Loli(object):
         if self.removeThyself:
             self.hspeed = 0
             self.hvel = 0
-            self.alpha -= 25
-            self.image.set_alpha(self.alpha)
+            self.alpha += 25
+            #self.alpha -= 25
             c, b = self.rect.center, self.bloodanimation[self.bloodindex]
             surface.blit(b, b.get_rect(center=c))
             self.removeCounter -= 1
@@ -255,19 +278,28 @@ class Loli(object):
 
 
 class BloodStain(object):
-    def __init__(self, pos):
+    def __init__(self, pos, surf):
         self.origimage = pygame.image.load(os.path.join(PATH, "images", "misc", "blood_stain.png")).convert_alpha()
         self.image = pygame.Surface(self.origimage.get_size())
-        self.image.fill(BGRGRAY)
-        self.image.set_colorkey(BGRGRAY)
-        self.image.blit(self.origimage, (0,0))
-        self.image.convert()
         self.rect = self.image.get_rect(center = pos)
-        self.alpha = 500
+        self.bgrpatch = self.image.copy()
+        self.bgrpatch.blit(surf.copy(), (0,0), self.rect)
+        self.bgrpatch_alpha = self.bgrpatch.copy().convert()
+        self.image.blit(self.bgrpatch, (0,0))
+        self.image.blit(self.origimage, (0,0))
+        self.alpha = -250
     
     def update(self, surface):
-        self.alpha -= 1
-        self.image.set_alpha(self.alpha)
+        self.alpha += 1
+        if self.alpha < -240:
+            self.bgrpatch.blit(surface.copy(), (0,0), self.rect)
+        if self.alpha == 0:
+            self.bgrpatch_alpha = self.bgrpatch.copy().convert()
+        self.image.blit(self.bgrpatch, (0,0))
+        self.image.blit(self.origimage, (0,0))
+        if self.alpha:
+            self.bgrpatch_alpha.set_alpha(self.alpha)
+            self.image.blit(self.bgrpatch_alpha, (0,0))
         surface.blit(self.image, self.rect)
 
 
@@ -351,12 +383,13 @@ class Game(object):
     def __init__(self):
         pygame.mixer.pre_init(48000)
         pygame.init()
+        pygame.event.set_allowed((QUIT, MOUSEBUTTONDOWN, KEYDOWN))
         
         self.width = 640
         self.height = 480
         self.center = (self.width//2, self.height//2)
         self.windowsize = (self.width, self.height)
-        self.screen = pygame.display.set_mode(self.windowsize)
+        self.screen = pygame.display.set_mode(self.windowsize, DOUBLEBUF)
         self.windowrect = self.screen.get_rect()
         self.windowrect.topleft = (0, 0)
         
@@ -383,6 +416,15 @@ class Game(object):
         self.first = True
         self.volume = 1
         self.storyNarrativeCounter = 0
+        self.score = 0
+        self.lives = 3
+        self.paused = False
+        
+        self.gptxtdict = {
+            "score" : self.text(str(self.score), 22, pos=(340, 11), anchor='W', font="DejaVuSans-Bold.ttf", color=(51, 18, 3)),
+            "lifecount" : self.text('x'+str(math.ceil(self.lives)) if self.lives>3 else '', 22, pos=(140, 25), anchor="W", font='DejaVuSans-Bold.ttf'),
+            "level" : self.text(str(self.constants.level), 40, pos=(self.width//2,52), color=WHITE, font="DejaVuSans-Bold.ttf")
+        }
         
         self.alpha = 255 # use in story but maybe also other places
         
@@ -642,10 +684,23 @@ class Game(object):
         elif self.room == STORY: self.transitionscreen()
     
     def playGame(self):
+        if not pygame.key.get_focused():
+            self.paused = True
+        while self.paused:
+            pygame.display.iconify()
+            self.getEvents()
+            self.checkQuit()
+            pygame.mixer.music.pause()
+            self.update()
+            if pygame.key.get_focused():
+                self.paused = False
+                pygame.mixer.music.unpause()
         
+        f = False
         if not self.gameSetuped: self.setupGame()
         if not pygame.mixer.music.get_busy():
             if self.first:
+                f = True
                 self.first = False
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "silent.ogg"))
                 pygame.mixer.music.play(0, 1.5)
@@ -669,15 +724,19 @@ class Game(object):
             elif event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
                     for l in self.loliList:
-                        if l.rect.collidepoint(event.pos):
+                        if l.rect.collidepoint(event.pos) and l.hitbox:
+                            l.hitbox = False
                             if not self.scaryMode:
                                 self.sound.blop.play()
                             else:
                                 self.sound.balloon.play()
-                                self.bloodstains.append(BloodStain(l.rect.center))
+                                self.bloodstains.append(BloodStain(l.rect.center, self.screen))
                             l.removeThyself = True
                             self.score += 5*self.constants.level
-                            if not self.score % 100: self.constants.adjust()
+                            self.gptxtdict["score"] = self.text(str(self.score), 22, pos=(340, 11), anchor='W', font="DejaVuSans-Bold.ttf", color=(51, 18, 3))
+                            if not self.score % 100:
+                                self.constants.adjust()
+                                self.gptxtdict["level"] = self.text(str(self.constants.level), 40, pos=(self.width//2,52), color=WHITE, font="DejaVuSans-Bold.ttf")
                             if self.score > 9000:
                                 self.graphics.over9000 = self.graphics.over9000[0], self.graphics.over9000[0].get_rect(center=self.center)
                             break
@@ -700,50 +759,58 @@ class Game(object):
             pygame.mixer.music.fadeout(1000)
             self.first = True
         
-        score = self.text(str(self.score), 22, pos=(340, 25), anchor='W', font="DejaVuSans-Bold.ttf")
-        lifecount = self.text('x'+str(math.ceil(self.lives)) if self.lives>3 else '', 22, pos=(140, 25), anchor="W", font='DejaVuSans-Bold.ttf')
-        level = self.text(str(self.constants.level), 22, pos=(500,25), anchor="W", font="DejaVuSans-Bold.ttf")
+        self.graphics.drawLives(self.lives, self.scaryMode)
         
-        self.graphics.drawLives(self.lives)
-        
-        self.screen.fill(BGRGRAY)
+        if self.scaryMode:
+            self.screen.blit(self.graphics.darkgamebgr, (0,0))
+        else:
+            self.screen.blit(self.graphics.gamebgr, (0,0))
         
         # HANDLE BLOODSTAIN BLITTING
         toremove = []
         for i, s in enumerate(self.bloodstains):
             s.update(self.screen)
-            if s.alpha == 0:
+            if s.alpha == 255:
+                f = True
                 toremove.append(i)
         for i, x in enumerate(toremove):
             self.bloodstains.pop(x-i) # i = popped elements - since list gets shorter
         # END OF HANDLE BLOODSTAIN BLITTING
         
+        # MAYBE CHANGE SECOND LINE FROM HERE IF SHIT HAPPENS
         if not self.loliSpawned:
-            self.loliList.append(Loli(self.graphics.lolis[random.randint(0,len(self.graphics.lolis)-1)]))
+            self.loliList.append(Loli(self.graphics.lolis[random.randint(0,len(self.graphics.lolis)-1)], self.screen))
             self.loliSpawned = self.constants.spawnDelay
         else:
             self.loliSpawned -= 1
         for l in self.loliList:
             if l.rect.bottom < 50:
                 self.loliList.remove(l)
+                f = True
                 self.lives = round(self.lives - 0.5, 1)
             elif l.doneRemoving:
+                f = True
                 self.loliList.remove(l)
             else:
-                l.goUp(self.constants.baseVSpeed, self.constants.randomVSpeedLevel)
-                l.drift() # the initial speed must first be applied, or else weird stuff happens
-                l.goLR()
+                if not l.removeThyself:
+                    l.goUp(self.constants.baseVSpeed, self.constants.randomVSpeedLevel)
+                    l.drift() # the initial speed must first be applied, or else weird stuff happens
+                    l.goLR()
                 if not self.scaryMode: l.remove(self.screen) # remove and explode incorporate draw
                 else: l.explode(self.screen)                 # see line above
         
-        self.screen.blit(self.graphics.statusbar, (0,0))
-        self.screen.blit(score[0], score[1])
-        self.screen.blit(level[0], level[1])
-        self.screen.blit(self.graphics.volume[self.volume], self.graphics.volume[0].get_rect(center=(600, 25)))
+        self.screen.blit(self.graphics.top, (0,0))
+        self.screen.blit(self.gptxtdict["score"][0], self.gptxtdict["score"][1])
+        self.screen.blit(self.gptxtdict["level"][0], self.gptxtdict["level"][1])
+        self.screen.blit(self.graphics.volume[self.volume], (0,0))
         self.screen.blit(self.graphics.over9000[0], self.graphics.over9000[1])
-        self.screen.blit(lifecount[0], lifecount[1])
         
-        self.update(self.room==GAMEOVER and 1 or 60)
+        upd = [x.rect.inflate(14,2*self.constants.baseVSpeed+2) for x in (self.loliList+self.bloodstains)]+[self.gptxtdict["score"][1], self.gptxtdict["level"][1], pygame.Rect(45, 7, 105, 40)]
+        
+        if f:
+            self.update()
+        else:   
+            self.update(self.room==GAMEOVER and 1 or 60, upd)
     
     def gameOver(self):
         if not pygame.mixer.music.get_busy():
