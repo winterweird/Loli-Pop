@@ -67,6 +67,7 @@ BLUE = (0, 0, 255)
 CYAN = (0, 255, 255)
 YELLOW = (255, 255, 0)
 HORRIBLEMAGENTA = (255, 0, 255)
+ALMOSTWHITE = (250,250,250)
 STATUSBARGRAY = (181, 181, 181)
 BGRGRAY = (230, 230, 230) # Wow, this came in handy....
 #                         # ... and THAT is why a simple bgr color is perfectly fine!
@@ -103,42 +104,46 @@ class Graphics(object):
         self.mainmenubgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "sleepy_loli_resized.png"))
         self.mainmenubgr = (self.mainmenubgr, self.mainmenubgr.get_rect(x=10))
         
+        self.gamebgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "background.jpg")).convert()
+        self.darkgamebgr = pygame.image.load(os.path.join(PATH, "images", "bgrs", "background-dark.jpg")).convert()
+        
         self.lelittlestar = pygame.image.load(os.path.join(PATH, "images", "menu", "smallstarthing.png"))
         lolipath = os.path.join(PATH, "images", "lolis", "resized")
         self.lolis = [pygame.image.load(os.path.join(lolipath, x)) for x in os.listdir(lolipath)]
         
         self.statusbar = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'statusbar.png'))
         self.heart = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'heart.png'))
-        self.over9000 = Game.text(Game, "IT'S OVER 9000!", 80, pos=(0, -100), font='edo.ttf')
-        self.volume = [pygame.image.load(os.path.join(PATH, "images", "misc", "volume_"+x+".png")) for x in ("off", "on")]
+        self.volume = [pygame.image.load(os.path.join(PATH, "images", "misc", "volume_"+x+"_new.png")) for x in ("off", "on")]
+        self.volume_old = [pygame.image.load(os.path.join(PATH, "images", "misc", "volume_"+x+".png")) for x in ("off", "on")]
         
         self.storyloli = pygame.image.load(os.path.join(PATH, "images", "menu", "story_loli.png"))
         self.credits = pygame.image.load(os.path.join(PATH, "images", "misc", "credits.png"))
     
-    def drawLives(self, nOfLives):
+    def drawLives(self, nOfLives, dark=False):
         """Draw the lives on the statusbar"""
-        initialPos = (100, 10)
+        initialPos = (45, 7)
         if nOfLives < 0: nOfLives = 0 # can't make surface with negative size
-        self.statusbar = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'statusbar.png'))
+        if not dark: self.top = pygame.image.load(os.path.join(PATH, "images", "misc", "top.png"))
+        else: self.top = pygame.image.load(os.path.join(PATH, 'images', 'misc', 'top-dark.png'))
         if nOfLives > 3:
             if int(nOfLives) == nOfLives: # doesn't truncate => whole number
-                self.statusbar.blit(self.heart, initialPos)
+                self.top.blit(self.heart, initialPos)
             else:
                 surf = pygame.Surface((round(31*(nOfLives-int(nOfLives))), 30))
-                surf.fill(STATUSBARGRAY)
+                surf.blit(self.top, (0,0), pygame.Rect(initialPos, surf.get_size()))
                 surf.blit(self.heart, (0,0))
-                self.statusbar.blit(surf, initialPos)
+                self.top.blit(surf, initialPos)
         else:
             x, y = initialPos
             while nOfLives >= 1:
-                self.statusbar.blit(self.heart, (x,y))
+                self.top.blit(self.heart, (x,y))
                 nOfLives -= 1
                 x += 35
             if nOfLives:
                 surf = pygame.Surface((round(31*nOfLives), 30))
-                surf.fill((181,181,181))
+                surf.blit(self.top, (0, 0), pygame.Rect((x, y), surf.get_size()))
                 surf.blit(self.heart, (0,0))
-                self.statusbar.blit(surf, (x,y))
+                self.top.blit(surf, (x,y))
 
 
 
@@ -157,27 +162,38 @@ class Sound(object):
             self.click = pygame.mixer.Sound(os.path.join(PATH, "sound", "sfx", "click.ogg"))
         except:
             print("Couldn't load click.ogg")
+        
+        self.masterVolume = 1
+        self.masterChannel = pygame.mixer.Channel(5)
+        self.sfxChannel = pygame.mixer.Channel(6)
+        self.musicChannel = pygame.mixer.Channel(7)
+        self.musicChannel.set_volume(0.5)
 
 
 
 class Loli(object):
-    def __init__(self, loli):
+    def __init__(self, loli, surf):
+        self.bgr = surf.convert()
         
         self.origimage = loli
+        self.currentLoliImage = self.origimage
         self.image = pygame.Surface(self.origimage.get_size())
-        self.image.fill(BGRGRAY)
-        self.image.set_colorkey(BGRGRAY)
-        self.image.blit(self.origimage, (0,0))
+        
+        # place image
         self.rect = self.image.get_rect()
-        # I'll get back to placing the rect
+        self.hitbox = True
+        minDistanceFromEdge = 100
+        self.rect.center = (random.randint(minDistanceFromEdge, 640-minDistanceFromEdge), 600)
+        
+        # make the background the screen thus far
+        self.image.blit(self.bgr, (-self.rect.x, -self.rect.y))
+        self.image.blit(self.origimage, (0,0))
+        
         
         # base horizontal speed
         self.hspeed = 0.2
         self.maxhspeed = random.randint(5, 7)
         self.hvel = self.maxhspeed*random.choice((-1, 1)) # random start direction: left/right
-        
-        minDistanceFromEdge = 100
-        self.rect.center = (random.randint(minDistanceFromEdge, 640-minDistanceFromEdge), 600)
         
         # Any decimal positions will be stored here
         self.xpos, self.ypos = self.rect.x, self.rect.y
@@ -194,12 +210,23 @@ class Loli(object):
         self.resizer = 1
         self.removeThyself = False
         self.doneRemoving = False
-        self.alpha = 250
+        self.alpha = 0
+        #self.alpha = 255
         bpth = os.path.join(PATH, "images", "misc", "blood_d")
         self.bloodanimation = [pygame.image.load(os.path.join(bpth, x)) for x in os.listdir(bpth)]
         self.bloodindex = 0
     
     def draw(self, surf):
+        #self.image.fill(ALMOSTWHITE)
+        if self.removeThyself:
+            self.bgr = surf.copy()
+            self.image.blit(self.bgr, (0,0), self.rect)
+            self.image.blit(self.currentLoliImage, (0,0))
+            self.bgr.set_alpha(self.alpha)
+            self.image.blit(self.bgr, (0,0), self.rect)
+            #self.image.set_alpha(self.alpha)
+        else:
+            self.image = self.origimage.copy()
         surf.blit(self.image, self.rect)
     
     def goUp(self, base, randomnessBoundry):
@@ -232,7 +259,9 @@ class Loli(object):
             self.hvel = 0
             self.resizer = round(self.resizer+0.05, 2)
             c = self.rect.center
-            self.image = pygame.transform.scale(self.origimage, (round(self.origimage.get_width()*self.resizer), round(self.origimage.get_height()*self.resizer)))
+            self.currentLoliImage = pygame.transform.scale(self.origimage, (round(self.origimage.get_width()*self.resizer), round(self.origimage.get_height()*self.resizer)))
+            self.image = pygame.Surface(self.currentLoliImage.get_size())
+            self.image.set_colorkey(ALMOSTWHITE)
             self.rect = self.image.get_rect(center=c)
             self.removeCounter -= 1
             if not self.removeCounter:
@@ -243,8 +272,8 @@ class Loli(object):
         if self.removeThyself:
             self.hspeed = 0
             self.hvel = 0
-            self.alpha -= 25
-            self.image.set_alpha(self.alpha)
+            self.alpha += 25
+            #self.alpha -= 25
             c, b = self.rect.center, self.bloodanimation[self.bloodindex]
             surface.blit(b, b.get_rect(center=c))
             self.removeCounter -= 1
@@ -255,19 +284,28 @@ class Loli(object):
 
 
 class BloodStain(object):
-    def __init__(self, pos):
+    def __init__(self, pos, surf):
         self.origimage = pygame.image.load(os.path.join(PATH, "images", "misc", "blood_stain.png")).convert_alpha()
         self.image = pygame.Surface(self.origimage.get_size())
-        self.image.fill(BGRGRAY)
-        self.image.set_colorkey(BGRGRAY)
-        self.image.blit(self.origimage, (0,0))
-        self.image.convert()
         self.rect = self.image.get_rect(center = pos)
-        self.alpha = 500
+        self.bgrpatch = self.image.copy()
+        self.bgrpatch.blit(surf.copy(), (0,0), self.rect)
+        self.bgrpatch_alpha = self.bgrpatch.copy().convert()
+        self.image.blit(self.bgrpatch, (0,0))
+        self.image.blit(self.origimage, (0,0))
+        self.alpha = -250
     
     def update(self, surface):
-        self.alpha -= 1
-        self.image.set_alpha(self.alpha)
+        self.alpha += 1
+        if self.alpha < -240:
+            self.bgrpatch.blit(surface.copy(), (0,0), self.rect)
+        if self.alpha == 0:
+            self.bgrpatch_alpha = self.bgrpatch.copy().convert()
+        self.image.blit(self.bgrpatch, (0,0))
+        self.image.blit(self.origimage, (0,0))
+        if self.alpha:
+            self.bgrpatch_alpha.set_alpha(self.alpha)
+            self.image.blit(self.bgrpatch_alpha, (0,0))
         surface.blit(self.image, self.rect)
 
 
@@ -307,29 +345,32 @@ class FallingBGR(object):
 
 
 class ConfirmDialog(object):
-    def __init__(self):
+    def __init__(self, mother):
+        self.mother = mother
         self.image = pygame.Surface((200, 100))
+        self.width, self.height = self.image.get_size()
         self.image.fill(WHITE)
         pygame.draw.rect(self.image, BLACK, (0, 0, 200, 100), 5)
-        self.areusure = Game.text(Game, "Are you sure?", 20, pos=(self.image.get_width()//2,30), font="DejaVuSans-Bold.ttf")
-        
-        self.yes = Game.text(Game, "YES", 15, pos=(50, 80), font="DejaVuSans-Bold.ttf")
-        self.no = Game.text(Game, "NO", 15, pos=(150, 80), font="DejaVuSans-Bold.ttf")
-        self.yesCenterRelative = (-50, 30)
-        self.noCenterRelative = (50, 30)
-        for item in [self.areusure, self.yes, self.no]:
-            self.image.blit(item[0], item[1])
     
     def confirm(self, screen):
+        areusure = self.mother.text("Are you sure?", 20, pos=(self.width//2,30), font="DejaVuSans-Bold.ttf")
+        yes = self.mother.text("YES", 15, pos=(50, 80), font="DejaVuSans-Bold.ttf")
+        no = self.mother.text("NO", 15, pos=(150, 80), font="DejaVuSans-Bold.ttf")
+        yesCenterRelative = (-50, 30)
+        noCenterRelative = (50, 30)
+        
+        for item in [areusure, yes, no]:
+            self.image.blit(item[0], item[1])
+        
+        yesRect = yes[0].get_rect(center=(screen.get_width()//2+yesCenterRelative[0], screen.get_height()//2+yesCenterRelative[1]))
+        noRect = no[0].get_rect(center=(screen.get_width()//2+noCenterRelative[0], screen.get_height()//2+noCenterRelative[1]))
+        
         while True:
             screen.blit(self.image, self.image.get_rect(center=(screen.get_width()//2, screen.get_height()//2)))
-            yesRect = self.yes[0].get_rect(center=(screen.get_width()//2+self.yesCenterRelative[0], screen.get_height()//2+self.yesCenterRelative[1]))
-            noRect = self.no[0].get_rect(center=(screen.get_width()//2+self.noCenterRelative[0], screen.get_height()//2+self.noCenterRelative[1]))
-            for event in pygame.event.get():
-                if event.type == QUIT:
-                    pygame.quit()
-                    sys.exit()
-                elif event.type == MOUSEBUTTONDOWN:
+            self.mother.getEvents()
+            self.mother.checkQuit()
+            for event in self.mother.events:
+                if event.type == MOUSEBUTTONDOWN:
                     if event.button == 1:
                         if yesRect.collidepoint(event.pos):
                             return True
@@ -342,21 +383,102 @@ class ConfirmDialog(object):
                         return False
                     if event.key == K_BACKSPACE:
                         return False
-            pygame.display.update()
+            self.mother.update()
+    
+    def warnPy2(self, screen):
+        title = self.mother.text("WARNING!", 20, pos=(self.width//2, 20), font="DejaVuSans-Bold.ttf")
+        dscrpt1 = self.mother.text("This game is faster", 10, pos=(self.width//2, 40), font="DejaVuSans-Bold.ttf")
+        dscrpt2 = self.mother.text("with Python 3.X", 10, pos=(self.width//2, 52), font="DejaVuSans-Bold.ttf")
+        yes = self.mother.text("Idc", 15, pos=(50, 80), font="DejaVuSans-Bold.ttf")
+        no = self.mother.text("Cancel", 15, pos=(150, 80), font="DejaVuSans-Bold.ttf")
+        yesCenterRelative = (-50, 30)
+        noCenterRelative = (50, 30)
+        for item in [title, dscrpt1, dscrpt2, yes, no]:
+            self.image.blit(item[0], item[1])
+        yesRect = yes[0].get_rect(center=(screen.get_width()//2+yesCenterRelative[0], screen.get_height()//2+yesCenterRelative[1]))
+        noRect = no[0].get_rect(center=(screen.get_width()//2+noCenterRelative[0], screen.get_height()//2+noCenterRelative[1]))
+        
+        while True:
+            screen.blit(self.image, self.image.get_rect(center=(screen.get_width()//2, screen.get_height()//2)))
+            self.mother.getEvents()
+            self.mother.checkQuit()
+            for event in self.mother.events:
+                if event.type == MOUSEBUTTONDOWN:
+                    if event.button == 1:
+                        if yesRect.collidepoint(event.pos):
+                            return True
+                        if noRect.collidepoint(event.pos):
+                            return False
+                elif event.type == KEYDOWN:
+                    if event.key == K_RETURN:
+                        return True
+                    if event.key == K_ESCAPE:
+                        return False
+                    if event.key == K_BACKSPACE:
+                        return False
+            self.mother.update()
+
+
+
+class VolumeBar(object):
+    def __init__(self, channel, pos, screen):
+        self.channel = channel
+        self.held = False
+        self.image = pygame.Surface((20, 110))
+        self.bgr = self.image.copy()
+        self.slider = pygame.Surface((20, 10))
+        self.volumepart = pygame.Surface((10, 100))
+        self.thisIsVolume = self.volumepart.copy()
+        
+        self.rect = self.image.get_rect()
+        self.rect.center = pos
+        self.bgr.blit(screen.copy(), (0,0), self.rect)
+        
+        self.slider.fill((200, 200, 200))
+        self.slider_rect = self.slider.get_rect(centery = 105-100*self.channel.get_volume())
+        self.volumepart.fill((230,230,230))
+        self.thisIsVolume.fill(GREEN)
+        
+        self.volumepart.blit(self.thisIsVolume, (0,100-100*self.channel.get_volume()))
+        
+        self.image.blit(self.bgr, (0,0))
+        self.image.blit(self.volumepart, (5, 5))
+        self.image.blit(self.slider, self.slider_rect)
+    
+    def update(self, screen):
+        self.bgr = screen.copy()
+        self.volumepart.fill((230,230,230))
+        self.volumepart.blit(self.thisIsVolume, (0,100-100*self.channel.get_volume()))
+        
+        self.image.blit(self.bgr, (0,0))
+        self.image.blit(self.volumepart, (5, 5))
+        self.image.blit(self.slider, self.slider_rect)
+        
+        screen.blit(self.image, self.rect)
+    
+    def slide(self, pos):
+        x, y = pos[0]-self.rect.x, pos[1]-self.rect.y
+        if y<5:
+            y = 5
+        elif y > 105:
+            y = 105
+        self.slider_rect.centery = y
+        self.channel.set_volume(0.01*(105-y))
 
 
 
 class Game(object):
     center = (320, 240)
     def __init__(self):
-        pygame.mixer.pre_init(48000)
+        pygame.mixer.pre_init(frequency=48000)
         pygame.init()
+        pygame.event.set_allowed((QUIT, MOUSEBUTTONDOWN, MOUSEBUTTONUP, KEYDOWN))
         
         self.width = 640
         self.height = 480
         self.center = (self.width//2, self.height//2)
         self.windowsize = (self.width, self.height)
-        self.screen = pygame.display.set_mode(self.windowsize)
+        self.screen = pygame.display.set_mode(self.windowsize, DOUBLEBUF)
         self.windowrect = self.screen.get_rect()
         self.windowrect.topleft = (0, 0)
         
@@ -367,7 +489,7 @@ class Game(object):
         self.sound = Sound()
         self.constants = GameConstants()
         self.gameOverBGR = FallingBGR()
-        self.confirmDialog = ConfirmDialog()
+        self.confirmDialog = ConfirmDialog(self)
         
         self.clock = pygame.time.Clock()
         
@@ -380,9 +502,25 @@ class Game(object):
             try: self.confirmQuit = int(cq.readline())
             except: self.confirmQuit = 1
         
+        self.using2 = True if sys.version_info[0] == 2 else False
+        
         self.first = True
         self.volume = 1
         self.storyNarrativeCounter = 0
+        self.score = 0
+        self.lives = 3
+        self.paused = False
+        
+        self.volumeControls =  [VolumeBar(self.sound.masterChannel, (500, 200), self.screen),
+                                VolumeBar(self.sound.sfxChannel, (540, 200), self.screen),
+                                VolumeBar(self.sound.musicChannel,(580, 200), self.screen)]
+        
+        self.gptxtdict = {
+            "score" : self.text(str(self.score), 22, pos=(340, 11), anchor='W', font="DejaVuSans-Bold.ttf", color=(51, 18, 3)),
+            "lifecount" : self.text('x'+str(math.ceil(self.lives)) if self.lives>3 else '', 22, pos=(140, 25), anchor="W", font='DejaVuSans-Bold.ttf'),
+            "level" : self.text(str(self.constants.level), 40, pos=(self.width//2,52), color=WHITE, font="DejaVuSans-Bold.ttf"),
+            "over9000" : self.text("IT'S OVER 9000!", 80, pos=(0, -100), font='edo.ttf')
+        }
         
         self.alpha = 255 # use in story but maybe also other places
         
@@ -416,6 +554,12 @@ class Game(object):
         self.returnCountdown = 100
         self.newHigh = False
         self.constants.__init__()
+        self.gptxtdict = {
+            "score" : self.text(str(self.score), 22, pos=(340, 11), anchor='W', font="DejaVuSans-Bold.ttf", color=(51, 18, 3)),
+            "lifecount" : self.text('x'+str(math.ceil(self.lives)) if self.lives>3 else '', 22, pos=(140, 25), anchor="W", font='DejaVuSans-Bold.ttf'),
+            "level" : self.text(str(self.constants.level), 40, pos=(self.width//2,52), color=WHITE, font="DejaVuSans-Bold.ttf"),
+            "over9000" : self.text("IT'S OVER 9000!", 80, pos=(0, -100), font='edo.ttf')
+        }
         self.bloodstains = [] # contains BloodStain() instances
         self.gameSetuped = True
     
@@ -469,10 +613,19 @@ class Game(object):
         bgr.blit(msg[0], (0,0))
         bgr.convert()
         
+        ftc = self.text("Fuck this crap!", 20, pos=(self.center[0],430))[1]
+        
         # OBSERVE MY SHITTY FLASHING OF TEXT
         while True:
             self.getEvents()
             self.checkQuit()
+            
+            if cim:
+                for event in self.events:
+                    if event.type == MOUSEBUTTONDOWN:
+                        if event.button == 1:
+                            if ftc.collidepoint(event.pos):
+                                return True
             
             alpha += 1
             
@@ -484,6 +637,12 @@ class Game(object):
             while alpha == 30: # since layers pile up, it's opaque now
                 self.getEvents()
                 self.checkQuit()
+                if cim:
+                    for event in self.events:
+                        if event.type == MOUSEBUTTONDOWN:
+                            if event.button == 1:
+                                if ftc.collidepoint(event.pos):
+                                    return True
                 
                 x += 1
                 
@@ -513,7 +672,9 @@ class Game(object):
         
         cx, cy = pos
         for l in lines:
-            self.flash(l, size, pos=(cx, cy), anchor=anchor, color=color, font=font, bgrColor=bgrColor, cim=True)
+            if self.flash(l, size, pos=(cx, cy), anchor=anchor, color=color, font=font, bgrColor=bgrColor, cim=True):
+                self.room = MAINMENU
+                return
             if l: cy += size
         self.update(1)
     
@@ -569,13 +730,8 @@ class Game(object):
                 pygame.mixer.music.play(0, 1.5)
             else:
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "lolita.ogg"))
-                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
                 pygame.mixer.music.play(-1)
-        
-        if self.volume:
-            pygame.mixer.music.set_volume(0.5)
-        else:
-            pygame.mixer.music.set_volume(0)
         
         # LOLI POP title
         lolipop = self.text("LOLI   POP", 50, pos=(480, 80))
@@ -612,7 +768,8 @@ class Game(object):
             if event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
                     if playgame[1].collidepoint(event.pos): # player clicked the play game button
-                        self.room = PLAYGAME
+                        if (not self.using2) or self.confirmDialog.warnPy2(self.screen):
+                            self.room = PLAYGAME
                     elif settings[1].collidepoint(event.pos): # player clicked the settings button
                         self.room = SETTINGS
                     elif story[1].collidepoint(event.pos):
@@ -642,22 +799,30 @@ class Game(object):
         elif self.room == STORY: self.transitionscreen()
     
     def playGame(self):
+        if not pygame.key.get_focused():
+            self.paused = True
+        while self.paused:
+            pygame.display.iconify()
+            self.getEvents()
+            self.checkQuit()
+            pygame.mixer.music.pause()
+            self.update()
+            if pygame.key.get_focused():
+                self.paused = False
+                pygame.mixer.music.unpause()
         
+        f = False
         if not self.gameSetuped: self.setupGame()
         if not pygame.mixer.music.get_busy():
             if self.first:
+                f = True
                 self.first = False
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "silent.ogg"))
                 pygame.mixer.music.play(0, 1.5)
             else:
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", ("creepy_music" if self.scaryMode else "thai_music")+".ogg"))
-                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
                 pygame.mixer.music.play(-1)
-        
-        if self.volume:
-            pygame.mixer.music.set_volume(0.5)
-        else:
-            pygame.mixer.music.set_volume(0)
         
         for event in self.events:
             if event.type == KEYDOWN:
@@ -669,25 +834,35 @@ class Game(object):
             elif event.type == MOUSEBUTTONDOWN:
                 if event.button == 1:
                     for l in self.loliList:
-                        if l.rect.collidepoint(event.pos):
+                        if l.rect.collidepoint(event.pos) and l.hitbox:
+                            l.hitbox = False
                             if not self.scaryMode:
+                                self.sound.blop.set_volume(self.sound.sfxChannel.get_volume()*self.sound.masterChannel.get_volume())
                                 self.sound.blop.play()
                             else:
+                                self.sound.balloon.set_volume(self.sound.sfxChannel.get_volume()*self.sound.masterChannel.get_volume())
                                 self.sound.balloon.play()
-                                self.bloodstains.append(BloodStain(l.rect.center))
+                                self.bloodstains.append(BloodStain(l.rect.center, self.screen))
                             l.removeThyself = True
                             self.score += 5*self.constants.level
-                            if not self.score % 100: self.constants.adjust()
+                            self.gptxtdict["score"] = self.text(str(self.score), 22, pos=(340, 11), anchor='W', font="DejaVuSans-Bold.ttf", color=(51, 18, 3))
+                            if not self.score % 100:
+                                self.constants.adjust()
+                                self.gptxtdict["level"] = self.text(str(self.constants.level), 40, pos=(self.width//2,52), color=WHITE, font="DejaVuSans-Bold.ttf")
                             if self.score > 9000:
-                                self.graphics.over9000 = self.graphics.over9000[0], self.graphics.over9000[0].get_rect(center=self.center)
+                                self.gptxtdict["over9000"] = self.gptxtdict["over9000"][0], self.gptxtdict["over9000"][0].get_rect(center=self.center)
                             break
                     else:
                         if not self.graphics.statusbar.get_rect().collidepoint(event.pos):
+                            self.sound.click.set_volume(self.sound.sfxChannel.get_volume()*self.sound.masterChannel.get_volume())
                             self.sound.click.play()
                             self.lives = round(self.lives - 0.1, 1)
                         else:
                             if pygame.Rect(576, 1, 48, 48).collidepoint(event.pos):
+                                f = True
                                 self.volume = 0 if self.volume else 1
+                                self.sound.masterChannel.set_volume(self.sound.masterVolume*self.volume)
+                                pygame.mixer.music.stop()
         
         if self.lives <= 0:
             with open(os.path.join(PATH, "game_data", "high.score"), "r") as hsfile:
@@ -700,50 +875,62 @@ class Game(object):
             pygame.mixer.music.fadeout(1000)
             self.first = True
         
-        score = self.text(str(self.score), 22, pos=(340, 25), anchor='W', font="DejaVuSans-Bold.ttf")
-        lifecount = self.text('x'+str(math.ceil(self.lives)) if self.lives>3 else '', 22, pos=(140, 25), anchor="W", font='DejaVuSans-Bold.ttf')
-        level = self.text(str(self.constants.level), 22, pos=(500,25), anchor="W", font="DejaVuSans-Bold.ttf")
+        self.graphics.drawLives(self.lives, self.scaryMode)
         
-        self.graphics.drawLives(self.lives)
-        
-        self.screen.fill(BGRGRAY)
+        if self.scaryMode:
+            self.screen.blit(self.graphics.darkgamebgr, (0,0))
+        else:
+            self.screen.blit(self.graphics.gamebgr, (0,0))
         
         # HANDLE BLOODSTAIN BLITTING
         toremove = []
         for i, s in enumerate(self.bloodstains):
             s.update(self.screen)
-            if s.alpha == 0:
+            if s.alpha == 255:
+                f = True
                 toremove.append(i)
         for i, x in enumerate(toremove):
             self.bloodstains.pop(x-i) # i = popped elements - since list gets shorter
         # END OF HANDLE BLOODSTAIN BLITTING
         
+        # MAYBE CHANGE SECOND LINE FROM HERE IF SHIT HAPPENS
         if not self.loliSpawned:
-            self.loliList.append(Loli(self.graphics.lolis[random.randint(0,len(self.graphics.lolis)-1)]))
+            self.loliList.append(Loli(self.graphics.lolis[random.randint(0,len(self.graphics.lolis)-1)], self.screen))
             self.loliSpawned = self.constants.spawnDelay
         else:
             self.loliSpawned -= 1
-        for l in self.loliList:
+        
+        toremove = []
+        for i, l in enumerate(self.loliList):
             if l.rect.bottom < 50:
-                self.loliList.remove(l)
+                toremove.append(i)
+                f = True
                 self.lives = round(self.lives - 0.5, 1)
             elif l.doneRemoving:
-                self.loliList.remove(l)
+                f = True
+                toremove.append(i)
             else:
-                l.goUp(self.constants.baseVSpeed, self.constants.randomVSpeedLevel)
-                l.drift() # the initial speed must first be applied, or else weird stuff happens
-                l.goLR()
+                if not l.removeThyself:
+                    l.goUp(self.constants.baseVSpeed, self.constants.randomVSpeedLevel)
+                    l.drift() # the initial speed must first be applied, or else weird stuff happens
+                    l.goLR()
                 if not self.scaryMode: l.remove(self.screen) # remove and explode incorporate draw
                 else: l.explode(self.screen)                 # see line above
+        for i, x in enumerate(toremove):
+            self.loliList.pop(x-i)
         
-        self.screen.blit(self.graphics.statusbar, (0,0))
-        self.screen.blit(score[0], score[1])
-        self.screen.blit(level[0], level[1])
-        self.screen.blit(self.graphics.volume[self.volume], self.graphics.volume[0].get_rect(center=(600, 25)))
-        self.screen.blit(self.graphics.over9000[0], self.graphics.over9000[1])
-        self.screen.blit(lifecount[0], lifecount[1])
+        self.screen.blit(self.graphics.top, (0,0))
+        self.screen.blit(self.gptxtdict["score"][0], self.gptxtdict["score"][1])
+        self.screen.blit(self.gptxtdict["level"][0], self.gptxtdict["level"][1])
+        self.screen.blit(self.graphics.volume[self.volume], (0,0))
+        self.screen.blit(self.gptxtdict["over9000"][0], self.gptxtdict["over9000"][1])
         
-        self.update(self.room==GAMEOVER and 1 or 60)
+        upd = [x.rect.inflate(14,2*self.constants.baseVSpeed+2) for x in (self.loliList+self.bloodstains)]+[self.gptxtdict["score"][1], self.gptxtdict["level"][1], pygame.Rect(45, 7, 105, 40)]
+        
+        if f:
+            self.update()
+        else:   
+            self.update(self.room==GAMEOVER and 1 or 60, upd)
     
     def gameOver(self):
         if not pygame.mixer.music.get_busy():
@@ -753,13 +940,8 @@ class Game(object):
                 pygame.mixer.music.play()
             else:
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "game_over.ogg"))
-                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
                 pygame.mixer.music.play(-1)
-        
-        if self.volume:
-            pygame.mixer.music.set_volume(0.5)
-        else:
-            pygame.mixer.music.set_volume(0)
         
         self.gameOverBGR.fall()
         self.gameOverBGR.draw(self.screen)
@@ -804,9 +986,26 @@ class Game(object):
             self.transitionscreen()
     
     def settings(self):
+        if not pygame.mixer.music.get_busy():
+            pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "lolita.ogg"))
+            pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
+            pygame.mixer.music.play(-1)
+        
+        pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
+        
+        if self.sound.masterChannel.get_volume() == 0:
+            self.volume = 0
+        else:
+            self.volume = 1
+            self.sound.masterVolume = self.sound.masterChannel.get_volume()
         
         # SETTINGS title
         title = self.text("SETTINGS", 50, pos=(self.width//2, 100))
+        
+        # VOLUME CONTROL lables
+        vc_main = self.text("Main", 10, pos=(self.volumeControls[0].rect.centerx, 270), font="DejaVuSans-Bold.ttf")
+        vc_sfx = self.text("SFX", 10, pos=(self.volumeControls[1].rect.centerx, 270), font="DejaVuSans-Bold.ttf")
+        vc_music = self.text("Music", 10, pos=(self.volumeControls[2].rect.centerx, 270), font="DejaVuSans-Bold.ttf")
         
         # BUTTONS GO HERE
         # ||
@@ -829,7 +1028,8 @@ class Game(object):
         buttons = [resetHigh, volume]
         if self.storyRead:
             buttons.append(scary)
-        otherthings = [title, returnToMain, (self.graphics.volume[self.volume], self.graphics.volume[0].get_rect(center=(400, 230)))]
+        otherthings = [title, returnToMain, [self.graphics.volume_old[self.volume], self.graphics.volume_old[0].get_rect(center=(400, 230))],
+                       vc_main, vc_sfx, vc_music]
         
         resetted = False
         scaremoved = False
@@ -854,7 +1054,17 @@ class Game(object):
                         scaremoved = True
                     elif volume[1].collidepoint(event.pos) or otherthings[2][1].collidepoint(event.pos):
                         self.volume = 0 if self.volume else 1
+                        otherthings[2][0] = self.graphics.volume_old[self.volume]
+                        self.sound.masterChannel.set_volume(self.volume*self.sound.masterVolume)
+                        pygame.mixer.music.stop()
                         voltog = True
+                    else:
+                        for i in self.volumeControls:
+                            if i.slider_rect.move(i.rect.x, i.rect.y).collidepoint(event.pos):
+                                i.held = True
+            elif event.type == MOUSEBUTTONUP:
+                for i in self.volumeControls:
+                    i.held = False
         
         self.screen.fill(WHITE)
         bgrimage = pygame.image.load(os.path.join(PATH, "images", "bgrs", "settings_bgr.png"))
@@ -871,16 +1081,19 @@ class Game(object):
             self.screen.blit(self.graphics.lelittlestar, self.graphics.lelittlestar.get_rect(center=c))
         for item in otherthings:
             self.screen.blit(item[0], item[1])
+        for item in self.volumeControls:
+            if item.held:
+                item.slide(pygame.mouse.get_pos())
+            item.update(self.screen)
+        
+        self.update()
         
         if resetted:
             self.flash("High Score was reset", 30, pos=(self.width//2, 150), font="DejaVuSans-Bold.ttf", bgrImg = os.path.join(PATH, "images", "bgrs", "settings_bgr.png"))
         if scaremoved:
             self.flash("Scary Mode toggled " +("off" if not self.scaryMode else "on"), 30, pos=(self.width//2, 150), font="DejaVuSans-Bold.ttf", bgrImg = os.path.join(PATH, "images", "bgrs", "settings_bgr.png"))
         if voltog:
-            pygame.mixer.music.set_volume(0.5 if self.volume else 0)
             self.flash("Volume turned " + ("on" if self.volume else "off"), 30, pos=(self.width//2, 150), font="DejaVuSans-Bold.ttf")
-        
-        self.update()
     
     def story(self):
         self.storyNarrativeCounter += 1
@@ -891,13 +1104,8 @@ class Game(object):
                 pygame.mixer.music.play(0, 1.5)
             else:
                 pygame.mixer.music.load(os.path.join(PATH, "sound", "music", "story_music.ogg"))
-                pygame.mixer.music.set_volume(0.5)
+                pygame.mixer.music.set_volume(self.sound.musicChannel.get_volume()*self.sound.masterChannel.get_volume())
                 pygame.mixer.music.play(-1)
-        
-        if self.volume:
-            pygame.mixer.music.set_volume(0.5)
-        else:
-            pygame.mixer.music.set_volume(0)
         
         if self.storyNarrativeCounter <101:
             frame = pygame.image.load(os.path.join(PATH, "images", "menu", "frame1.png")).convert()
@@ -1047,6 +1255,7 @@ class Game(object):
             else:
                 print("Idefkwyda, but this shit is not a room.")
                 self.room = MAINMENU
+
 
 
 if __name__ == '__main__':
